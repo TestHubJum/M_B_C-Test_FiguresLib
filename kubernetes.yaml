@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  labels:
+    app: web-app
+spec:
+  replicas: 3 # Ќам нужно ровно 3 реплики дл€ обработки нагрузки
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1 # ѕозвол€ет не более 1 неработающей реплики во врем€ обновлени€
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      containers:
+      - name: web-app-container
+        image: docker-image:latest # образ приложени€
+        resources:
+          requests:
+            memory: "128Mi" # ”казываем минимально необходимую пам€ть
+            cpu: "100m" # 0.1 CPU дл€ минимального потреблени€ после инициализации
+          limits:
+            memory: "128Mi" # ћаксимальный лимит по пам€ти
+            cpu: "500m" # Ћимит на CPU дл€ обработки пиковой нагрузки на старте
+        readinessProbe: # Ќастраиваем проверку готовности дл€ предотвращени€ обработки запросов до инициализации
+          httpGet:
+            path: /healthz # ”казываем маршрут дл€ проверки
+            port: 80 # ѕорт, который слушает приложение
+          initialDelaySeconds: 10 # «адержка перед началом проверки, чтобы дать врем€ на инициализацию
+          periodSeconds: 5 # »нтервал между проверками
+          failureThreshold: 3 #  оличество неудачных проверок до перезапуска
+        livenessProbe: # Ќастройка проверки живучести контейнера дл€ перезапуска при зависани€х
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          failureThreshold: 3
+        ports:
+        - containerPort: 80
+
+      affinity: # ќбеспечиваем отказоустойчивость через распределение подов по нодам
+        podAntiAffinity: # «апрещаем размещать поды на одной и той же ноде
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - web-app
+            topologyKey: "kubernetes.io/hostname" # ѕоды не будут запускатьс€ на одной и той же ноде
+
+      terminationGracePeriodSeconds: 30 # ”казываем врем€ дл€ корректного завершени€ работы подов перед их остановкой (30 секунд)
+
+      nodeSelector: #можно добавить селектор дл€ конкретных типов нод
+        node-type: general # «ависит от конфигурации вашего кластера
